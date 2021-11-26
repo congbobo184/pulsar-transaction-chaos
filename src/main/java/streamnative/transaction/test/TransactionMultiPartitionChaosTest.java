@@ -2,6 +2,7 @@ package streamnative.transaction.test;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -20,6 +21,7 @@ import org.apache.pulsar.common.naming.NamespaceName;
 import org.apache.pulsar.common.naming.TopicDomain;
 import org.apache.pulsar.common.naming.TopicName;
 import org.apache.pulsar.common.util.RateLimiter;
+import org.apache.pulsar.shade.com.google.common.collect.Sets;
 
 @Slf4j
 public class TransactionMultiPartitionChaosTest extends TransactionTestBase{
@@ -54,7 +56,9 @@ public class TransactionMultiPartitionChaosTest extends TransactionTestBase{
         admin.topics().createPartitionedTopic(topicName, 3);
 
         Map<String, Object> consumerConf = new HashMap<>();
-        consumerConf.put("topicName", topicName);
+        Set<String> topicNames = Sets.newTreeSet();
+        topicNames.add(topicName);
+        consumerConf.put("topicNames", topicNames);
         consumer = internalBuildConsumer(new TransactionMultiPartitionListener(), consumerConf, Schema.INT64);
 
         Map<String, Object> producerConf = new HashMap<>();
@@ -111,7 +115,7 @@ public class TransactionMultiPartitionChaosTest extends TransactionTestBase{
                     for (int i = 0; i < SIZE_OF_TXN; i++) {
                         internalProduceMsg(transactionProducer, value, rateLimiter, transaction);
                     }
-                    Future<Void> future = value == -1 ? transaction.abort() : transaction.commit();
+                    Future<Void> future = value == -1L ? transaction.abort() : transaction.commit();
                     //Do not care about the result of the ending of txn.
                 } catch (Exception e) {
                     log.error("Failed to build transaction");

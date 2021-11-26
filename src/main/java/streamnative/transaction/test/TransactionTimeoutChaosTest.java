@@ -2,6 +2,7 @@ package streamnative.transaction.test;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.pulsar.client.admin.PulsarAdmin;
@@ -18,6 +19,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
+import org.apache.pulsar.shade.com.google.common.collect.Sets;
 
 @Slf4j
 public class TransactionTimeoutChaosTest  extends TransactionTestBase{
@@ -46,7 +48,9 @@ public class TransactionTimeoutChaosTest  extends TransactionTestBase{
     protected void doSetup() throws Exception {
         internalSetup(TOPIC_PREFIX);
         Map<String, Object> consumerConf = new HashMap<>();
-        consumerConf.put("topicName", topicName);
+        Set<String> topicNames = Sets.newTreeSet();
+        topicNames.add(topicName);
+        consumerConf.put("topicNames", topicNames);
         consumer = internalBuildConsumer(new TransactionTimeoutListener(), consumerConf, Schema.INT64);
 
         Map<String, Object> configuration = new HashMap<>();
