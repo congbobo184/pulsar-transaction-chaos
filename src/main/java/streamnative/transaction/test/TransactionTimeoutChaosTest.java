@@ -106,7 +106,7 @@ public class TransactionTimeoutChaosTest  extends TransactionTestBase{
         CountDownLatch countDownLatch = new CountDownLatch(2);
         executor.execute(() -> {
             while (true) {
-                produceMsg(producer, produceCount, countDownLatch);
+                internalProduceMsg(producer, sendValue.incrementAndGet(), rateLimiter, null);
             }
         });
 
@@ -122,23 +122,13 @@ public class TransactionTimeoutChaosTest  extends TransactionTestBase{
         countDownLatch.await();
     }
 
-    private void produceMsg(Producer<Long> producer, long size, CountDownLatch countDownLatch)  {
-        for (long i = 0; i < size; i++) {
-          internalProduceMsg(producer, sendValue.incrementAndGet(), rateLimiter, null);
-        }
-        countDownLatch.countDown();
-    }
-
 
     private void produceTransactionMsg(Producer<Long> producer, long size, CountDownLatch countDownLatch) throws Exception {
         Transaction transaction = internalBuildTransaction(RandomUtils.nextLong(2, 31));
-        for (long i = 0; i < size; i++) {
-            if (tryAcquire()) {
-                producer.newMessage(transaction).value(-1L).sendAsync();
-            }
+        if (tryAcquire()) {
+            producer.newMessage(transaction).value(-1L).sendAsync();
         }
         producer.flushAsync();
-        countDownLatch.countDown();
     }
 
     private boolean tryAcquire() {
