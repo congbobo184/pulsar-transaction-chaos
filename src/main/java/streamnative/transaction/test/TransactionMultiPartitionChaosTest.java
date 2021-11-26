@@ -38,7 +38,7 @@ public class TransactionMultiPartitionChaosTest extends TransactionTestBase{
     private final RateLimiter rateLimiter = RateLimiter.builder().permits(PRODUCE_RATE).rateTime(1)
             .timeUnit(TimeUnit.SECONDS).build();
 
-    private static final String TOPIC_PREFIX = "transaction-multi-partition-test";
+    private static final String TOPIC_PREFIX = "transaction-multiPartition-test";
 
     private static final String topicName = TopicName.get(TopicDomain.persistent.toString(),
             NamespaceName.get(TENANT, NAMESPACE), TOPIC_PREFIX).toString() + RandomUtils.nextLong();
@@ -81,6 +81,7 @@ public class TransactionMultiPartitionChaosTest extends TransactionTestBase{
         @Override
         public void received(Consumer<Long> consumer, Message<Long> msg) {
             Long value = msg.getValue();
+            log.info("receive  message : {}", value);
             if (value == null) {
                 /**
                  * common: 0
@@ -90,7 +91,6 @@ public class TransactionMultiPartitionChaosTest extends TransactionTestBase{
                 consumer.acknowledgeAsync(msg);
                 return;
             }
-
             // receive aborted message
             if (value == -1L) {
                 log.error("receive aborted message {}", msg.getMessageId().toString());
@@ -110,8 +110,8 @@ public class TransactionMultiPartitionChaosTest extends TransactionTestBase{
         executor.execute(() -> {
             while (true) {
                 try {
-                    Transaction transaction = internalBuildTransaction(60L);
-                    long value = RandomUtils.nextLong() % 2  == 0 ? -1L : 1L;
+                    Transaction transaction = internalBuildTransaction(600L);
+                    long value = RandomUtils.nextInt() % 2  == 0 ? -1L : 1L;
                     for (int i = 0; i < SIZE_OF_TXN; i++) {
                         internalProduceMsg(transactionProducer, value, rateLimiter, transaction);
                     }

@@ -11,6 +11,7 @@ import org.apache.pulsar.client.admin.PulsarAdmin;
 import org.apache.pulsar.client.api.Consumer;
 import org.apache.pulsar.client.api.ConsumerBuilder;
 import org.apache.pulsar.client.api.Message;
+import org.apache.pulsar.client.api.MessageId;
 import org.apache.pulsar.client.api.MessageListener;
 import org.apache.pulsar.client.api.Producer;
 import org.apache.pulsar.client.api.ProducerBuilder;
@@ -126,7 +127,8 @@ public class TransactionTestBase {
         while (true) {
             if (tryAcquire(rateLimiter)) {
                 try {
-                    message.send();
+                    MessageId messageId = message.send();
+                    log.info("send message {} and return {}", value, messageId.toString());
                     break;
                 } catch (PulsarClientException ignored) {
                     log.error("send message error", ignored);
