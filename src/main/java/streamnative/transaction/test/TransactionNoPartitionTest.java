@@ -24,10 +24,11 @@ import org.apache.pulsar.common.util.RateLimiter;
 import org.apache.pulsar.shade.com.google.common.collect.Sets;
 
 @Slf4j
-public class TransactionMultiPartitionChaosTest extends TransactionTestBase{
+public class TransactionNoPartitionTest extends TransactionTestBase{
+
     private Consumer<Long> consumer;
 
-    private  Producer<Long> producer;
+    private Producer<Long> producer;
 
     private  Producer<Long> transactionProducer;
 
@@ -38,37 +39,37 @@ public class TransactionMultiPartitionChaosTest extends TransactionTestBase{
     private final RateLimiter rateLimiter = RateLimiter.builder().permits(PRODUCE_RATE).rateTime(1)
             .timeUnit(TimeUnit.SECONDS).build();
 
-    private static final String TOPIC_PREFIX = "transaction-multiPartition-test";
+    private static final String TOPIC_PREFIX = "transaction-noPartition-test";
 
     private static final String topicName = TopicName.get(TopicDomain.persistent.toString(),
             NamespaceName.get(TENANT, NAMESPACE), TOPIC_PREFIX).toString() + RandomUtils.nextLong();
 
     private static final ExecutorService executor = Executors.newFixedThreadPool(2);
 
-    public TransactionMultiPartitionChaosTest(String pulsarServiceUrl, String pulsarAdminUrl) throws Throwable{
+    public TransactionNoPartitionTest(String pulsarAdminUrl, String pulsarServiceUrl) throws Throwable {
         super(PulsarAdmin.builder().serviceHttpUrl(pulsarAdminUrl).build(), pulsarServiceUrl);
         doSetup();
         Executors.newScheduledThreadPool(1).scheduleWithFixedDelay(() -> {
             log.info("A total of {} common messages and {} txn messages were sent\n "
-                    + "{} common message were receive and {} commit message were receive\n",
+                            + "{} common message were receive and {} commit message were receive\n",
                     COMMON_MESSAGE_SEND.get(), TXN_MESSAGE_SEND.get(),
                     COMMON_MESSAGE_RECEIVE.get(), COMMIT_MESSAGE_RECEIVE.get());
         }, 5, 30, TimeUnit.MINUTES);
-        testSendMessagesToMultiPartitions();
+        testSendMessagesToNoPartitions();
     }
 
     protected void doSetup() throws Exception {
         internalSetup(TOPIC_PREFIX);
-        admin.topics().createPartitionedTopic(topicName, 3);
+        admin.topics().createNonPartitionedTopic(topicName);
 
         Map<String, Object> consumerConf = new HashMap<>();
         Set<String> topicNames = Sets.newTreeSet();
         topicNames.add(topicName);
         consumerConf.put("topicNames", topicNames);
-        consumer = internalBuildConsumer(new TransactionMultiPartitionListener(), consumerConf, Schema.INT64);
+        consumer = internalBuildConsumer(new TransactionMultiPartitionChaosTest.TransactionMultiPartitionListener(), consumerConf, Schema.INT64);
 
         Map<String, Object> producerConf = new HashMap<>();
-        producerConf.put("producerName", "testMultiPartition");
+        producerConf.put("producerName", "testTimeout");
         producerConf.put("batchingEnabled", false);
         producerConf.put("blockIfQueueFull", true);
         producerConf.put("maxPendingMessages", 3000);
@@ -82,14 +83,15 @@ public class TransactionMultiPartitionChaosTest extends TransactionTestBase{
         transactionProducer = internalBuildProduce(txnProducerConf, Schema.INT64);
     }
 
-    static class TransactionMultiPartitionListener implements MessageListener<Long> {
+    static class TransactionNoPartitionListener implements MessageListener<Long> {
 
         @Override
         public void received(Consumer<Long> consumer, Message<Long> msg) {
             Long value = msg.getValue();
+            log.info("receive  message : {}", value);
             if (value == null) {
                 /**
-                 * common: 0
+                 * common: 2,3,4,,,
                  * aborted: -1L
                  * committed: 1L
                  */
@@ -97,23 +99,26 @@ public class TransactionMultiPartitionChaosTest extends TransactionTestBase{
                 return;
             }
             // receive aborted message
+            // receive aborted message
             if (value == -1L) {
                 log.error("receive aborted message {}", msg.getMessageId().toString());
                 System.exit(0);
             } else if (value == 1L) {
                 COMMIT_MESSAGE_RECEIVE.incrementAndGet();
-            } else if (value == 0) {
-                COMMON_MESSAGE_RECEIVE.incrementAndGet();
+            } else if (value > COMMON_MESSAGE_RECEIVE.get() + 1) {
+                log.error("receive message not in order, actual : {}, " +
+                        "expect : {}, messageId : {}", value, COMMON_MESSAGE_RECEIVE.get() + 1, msg.getMessageId());
+                System.exit(0);
             }
         }
     }
 
-    public void testSendMessagesToMultiPartitions() throws Throwable {
+    public void testSendMessagesToNoPartitions() throws Throwable {
         CountDownLatch countDownLatch = new CountDownLatch(1);
         executor.execute(() -> {
+            COMMON_MESSAGE_SEND.getAndSet(2);
             while (true) {
-                internalProduceMsg(producer, 0L, rateLimiter, null);
-                COMMON_MESSAGE_SEND.incrementAndGet();
+                internalProduceMsg(producer, COMMON_MESSAGE_SEND.getAndIncrement(), rateLimiter, null);
             }
         });
 
@@ -135,6 +140,8 @@ public class TransactionMultiPartitionChaosTest extends TransactionTestBase{
         });
         countDownLatch.await();
     }
+
+
 
 
 }

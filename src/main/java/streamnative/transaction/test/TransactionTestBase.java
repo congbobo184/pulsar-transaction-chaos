@@ -5,12 +5,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.pulsar.client.admin.PulsarAdmin;
 import org.apache.pulsar.client.api.Consumer;
 import org.apache.pulsar.client.api.ConsumerBuilder;
-import org.apache.pulsar.client.api.Message;
 import org.apache.pulsar.client.api.MessageId;
 import org.apache.pulsar.client.api.MessageListener;
 import org.apache.pulsar.client.api.Producer;
@@ -27,6 +27,11 @@ import org.apache.pulsar.common.util.RateLimiter;
 
 @Slf4j
 public class TransactionTestBase {
+
+    final static AtomicLong COMMON_MESSAGE_SEND = new AtomicLong();
+    final static AtomicLong TXN_MESSAGE_SEND = new AtomicLong();
+    final static AtomicLong COMMIT_MESSAGE_RECEIVE = new AtomicLong();
+    final static AtomicLong COMMON_MESSAGE_RECEIVE = new AtomicLong();
 
     final static long produceRate = 500;
     protected final static String TENANT = "transaction";
@@ -113,8 +118,18 @@ public class TransactionTestBase {
 
     protected Transaction internalBuildTransaction(long timeout) throws Exception {
         PulsarClient client = PulsarClient.builder().serviceUrl(pulsarServiceUrl).enableTransaction(true).build();
-        return client.newTransaction()
-                .withTransactionTimeout(timeout, TimeUnit.SECONDS).build().get();
+        Transaction transaction;
+        AtomicLong tryTimes = new AtomicLong();
+        while (true) {
+            try {
+                transaction = client.newTransaction()
+                        .withTransactionTimeout(timeout, TimeUnit.SECONDS).build().get();
+                break;
+            } catch (Exception e) {
+                log.warn("Failed to build transaction {} times", tryTimes.incrementAndGet());
+            }
+        }
+        return transaction;
     }
 
     protected <T> void internalProduceMsg(Producer<T> producer, T value, RateLimiter rateLimiter, Transaction transaction) {
